@@ -1,0 +1,454 @@
+--- makepasswd-1.10.orig/makepasswd
++++ makepasswd-1.10/makepasswd
+@@ -4,7 +4,7 @@
+ # Program information.
+ #
+ 
+-$Program	= 'mkpasswd';
++$Program	= 'makepasswd';
+ $Version	= '1.10';
+ $Author		= 'Rob Levin <levin@openproject.net>';
+ $Date		= "Monday, 7 April 1999 at 22:56 (UCT)";
+@@ -19,6 +19,8 @@
+ use	Getopt::Long;
+ use	FileHandle;
+ use	integer;
++use	bytes;
++use	Crypt::OpenSSL::Random;
+ 
+ #
+ # Set default values for options ("" to indicate not-specified).
+@@ -28,6 +30,7 @@
+ $Clear = "";
+ $Count = "";
+ $Crypt = 0;
++$CryptMd5 = 0;
+ $CryptSalt = "";
+ $MaxChars = "";
+ $MinChars = "";
+@@ -43,8 +46,8 @@
+ #
+ 
+ $Error = 0;
+-$CharMin = 6;
+-$CharMax = 8;
++$CharMin = 8;
++$CharMax = 10;
+ $CharFormat = $CharMax + 3;
+ $CountUsed = 1;
+ $PasswordRepeat = 1;
+@@ -91,9 +94,11 @@
+ &GetOptions
+ (
+ 	'chars=i'		=> \$Chars,
++	'clear=s'		=> \$OldClear,
+ 	'clearfrom=s'		=> \$Clear,
+ 	'count=i'		=> \$Count,
+ 	'crypt!'		=> \$Crypt,
++	'crypt-md5!'		=> \$CryptMd5,
+ 	'cryptsalt=i'		=> \$CryptSalt,
+ 	'help'			=> \$ShowHelp,
+ 	'maxchars=i'		=> \$MaxChars,
+@@ -115,6 +120,17 @@
+ };
+ 
+ #
++# If password generation option was specified with the old --clear,
++# warn the user and exit
++#
++$OldClear ne "" and do
++{
++	print STDERR "$Program:  Option --clear is no longer present \n".
++			"please use --clearfrom and supply a file for it.\n";
++	$Error = 1;
++};
++
++#
+ # If password generation option was specified with --clearfrom, flag it.
+ #
+ 
+@@ -134,10 +150,10 @@
+ 			"--chars --minchars --maxchars --count --string.\n";
+ 		$Error = 1;
+ 	};
+-	$Crypt or do
++	$Crypt or $CryptMd5 or do
+ 	{
+ 		print STDERR "$Program:  Option --clearfrom may not be specified ".
+-			"without option --crypt.\n";
++			"without option --crypt or --crypt-md5.\n";
+ 		$Error = 1;
+ 	};
+ 	open CLEARFROM, "$Clear" or do
+@@ -256,9 +272,9 @@
+ # If --crypt is not set or --cryptsalt is set, disallow this parameter.
+ #
+ 
+-	$Crypt or do
++	$Crypt or $CryptMd5 or do
+ 	{
+-		print STDERR "$Program:  To use --repeatpass, --crypt must also be set.\n";
++		print STDERR "$Program:  To use --repeatpass, --crypt or --crypt-md5 must also be set.\n";
+ 		$Error = 1;
+ 	};
+ 	$CryptSalt and do
+@@ -425,12 +441,12 @@
+ exit(0);
+ 
+ #
+-# sub Help:  Display help information on STDERR.
++# sub Help:  Display help information on STDOUT.
+ #
+ 
+ sub Help
+ {
+-	print STDERR
++	print
+ "$Program v$Version, a utility to generate and/or encrypt passwords.
+ 
+ Copyright (c) $Copyright by $Author.  All rights are reserved by    
+@@ -441,42 +457,51 @@
+ 
+ Format:          $Program [option...]
+ 
+-For low (nonzero) values of --rerandom, tap the CONTROL key at random
+-intervals if the program seems to stall.  The entropy base for /dev/random
+-is depleted easily.
+-
+ Options are:
+ 
+ --chars=N        Generate passwords with exactly N characters (do not use with
+                        options --minchars and --maxchars).
+ --clearfrom=FILE Use a clear password from FILE instead of generating passwords.
+-                       Requires the --crypt option; may not be used with options
+-                       --chars, --maxchars, --minchars, --count, --string,
+-                       --nocrypt.  Trailing newlines are ignored, other
+-                       whitespace is not.
++                       Requires the --crypt or --crypt-md5 option; may not be
++                       used with options --chars, --maxchars, --minchars,
++                       --count, --string, --nocrypt.  Trailing newlines are
++                       ignored, other whitespace is not.
+ --count=N        Produce a total of N passwords (the default is one).
+ --crypt          Produce encrypted passwords.
++--crypt-md5      Produce encrypted passwords using the MD5 digest (hash)
++                       algorithm.
+ --cryptsalt=N    Use crypt() salt N, a positive number <= 4096.  If random
+                        seeds are desired, specify a zero value (the default).
+ --help           Ignore other operands and produce only this help display.
+---maxchars=N     Generate passwords with at most N characters (default=8).
+---minchars=N     Generate passwords with at least N characters (default=6).
++--maxchars=N     Generate passwords with at most N characters (default=10).
++--minchars=N     Generate passwords with at least N characters (default=8).
+ --nocrypt        Do not encrypt the generated password(s) (the default).
+ --noverbose      Display no labels on output (the default).
+ --randomseed=N   Use random number seed N, between 0 and 2^32 inclusive.  A zero
+-                       value results in a real-random seed.
++                       value results in a real-random seed.  This option
++                       generates predictable passwords, and should normally
++                       be avoided.
+ --rerandom=N     Set the random seed value every N values used.  Specify zero
+                        to use a single seed value (the default).  Specify
+                        one to get true-random passwords, but plan on hitting
+                        the CONTROL key a lot while it's running. ;)
+---repeatpass=N   Use each password N times (4096 maximum, --crypt must be set
+-                       and --cryptsalt may not be set).
++--repeatpass=N   Use each password N times (4096 maximum, --crypt or
++                       --crypt-md5 must be set and --cryptsalt may not be set).
+ --string=STRING  Use the characters in STRING to generate random passwords.
+ --verbose        Display labelling information on output.
+ ";
+ }
+ 
+ #
++# sub NumBits(N):  Number of significant bits in N.
++#
++
++sub NumBits
++{
++	return length(sprintf('%b', $_[0]));
++}
++
++#
+ # sub Random(A, B):  Produce a random integer from A to B, inclusive.
+ #
+ 
+@@ -492,7 +517,42 @@
+ 	{
+ 		$RerandomNow = $RerandomCount;
+ 	};
+-	my $RandomOutputVal=rand($_[1]-$_[0]+1);
++	my $RandomOutputVal;
++	if ($RandSeed)
++	{
++		$RandomOutputVal = rand($_[1]-$_[0]+1);
++	}
++	else
++	{
++		# Annoyingly, there's no Perl binding for
++		# BN_pseudo_rand_range, so we have to emulate it.  We
++		# repeatedly generate n-bit pseudo-random byte sequences
++		# (with n = number of significant bits in range) until we
++		# get something less than range.
++		my $range = $_[1]-$_[0]+1;
++		my $bits = NumBits($range);
++		my $bytes = ($bits - 1) / 8 + 1;
++		my $max = 1 << ($bytes * 8);
++		$max -= $max % $range;
++		while (1)
++		{
++			my $buf = Crypt::OpenSSL::Random::random_pseudo_bytes($bytes);
++			my $val = 0;
++			for my $byte (unpack('C*', $buf))
++			{
++				$val = ($val << 8) + $byte;
++			}
++			if ($val < $max)
++			{
++				# Using the modulus is OK here; we're
++				# working with a byte stream, so the
++				# low-order bits are no worse than any of
++				# the others.
++				$RandomOutputVal = $val % $range;
++				last;
++			}
++		}
++	}
+ 	$RandomOutputVal=$RandomOutputVal+$_[0];
+ 	$RandomOutputVal =~ s/\..*$//;
+ 	$RandomOutputVal;
+@@ -506,19 +566,25 @@
+ {
+ 	my $i;
+ 	my $SeedOutput = $RandSeed;
+-	$SeedOutput or do
++	if ($SeedOutput)
+ 	{
+-		open(RANDOMSEED, "</dev/random") or die "Could not access a seed value.\n";
+-		$SeedOutput=0;
+-		for (my $i=0; $i < 4; $i++)
++		srand $SeedOutput;
++	}
++	else
++	{
++		open(RANDOMSEED, "<:unix", "/dev/urandom") or die "Could not access a seed value.\n";
++		$SeedOutput='';
++		my $i=0;
++		while ($i < 32)
+ 		{
+-			$Char=getc(RANDOMSEED);
+-		        $NumChar=ord($Char);
+-			$SeedOutput = ($SeedOutput*256)+$NumChar;
++			my $r = read(RANDOMSEED, $SeedOutput, 32 - $i, $i);
++			die "read /dev/urandom failed: $!\n" unless defined $r;
++			$i += $r;
+ 		}
+ 		close(RANDOMSEED);
++		Crypt::OpenSSL::Random::random_seed($SeedOutput);
++		Crypt::OpenSSL::Random::random_status() or die "OpenSSL PRNG could not be sufficiently seeded.\n";
+ 	};
+-	srand $SeedOutput;
+ }
+ 
+ #
+@@ -588,6 +654,82 @@
+ }
+ 
+ #
++# sub Md5Base64Char(A): Base-64-encode a character from an MD5 digest.
++#
++
++sub Md5Base64Char
++{
++	my $map64 = './0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
++	my $char = shift;
++	$char = 0 if $char < 0;
++	$char = 63 if $char > 63;
++	substr($map64, $char, 1);
++}
++
++#
++# sub MakeMd5Salt(A, B):  Generate a crypt salt string from a number from 0
++# through 4095.
++#
++
++sub MakeMd5Salt
++{
++	my $md5 = Digest::MD5->new();
++	$md5->add(time);
++	$md5->add($$);
++	$md5->add($_[0]);
++	$md5->add($_[1]);
++	my $digest = $md5->digest;
++	$digest = substr($digest, 0, 8);
++	my $salt;
++	for my $char (map { ord($_) & 077 } split //, $digest)
++	{
++		$salt .= Md5Base64Char($char);
++	}
++	$salt;
++}
++
++#
++# sub CryptMd5Password(A, B):  Encrypt the password provided using the
++# MD5 digest algorithm; keep a running list of codes used as long as B is
++# true.
++#
++
++sub CryptMd5Password
++{
++	my $password = $_[0];
++	eval "use Crypt::PasswdMD5";
++	if ($@)
++	{
++		print STDERR "$Program:  Could not load the Crypt::PasswdMD5 library, cannot use --crypt-md5\n".
++			"This may be due to an invalid or incomplete Perl installation\n.";
++		exit 1;
++	};
++
++	my $ThisSeed = $SeedValue;
++	if ($ThisSeed)
++	{
++		$ThisSeed--;
++	}
++	else
++	{
++		$_[1] or do
++		{
++			%UsedSeed = ();
++		};
++		$ThisSeed = Random(0, 4095);
++		do
++		{
++			$ThisSeed = Random(0, 4095);
++		}
++		until not exists $UsedSeed{$ThisSeed};
++		$UsedSeed{$ThisSeed} = $ThisSeed;
++	}
++
++	my $salt = MakeMd5Salt($password, $ThisSeed);
++	unix_md5_crypt($password, $salt);
++}
++
++#
+ # sub ProcessPassword(A):  Process the password provided.
+ #
+ 
+@@ -600,6 +742,7 @@
+ 	
+ 	$Password = MakePassword();
+ 	$Crypt and $PaddedPass = sprintf "%-$CharFormat"."s", $Password;
++	$CryptMd5 and $PaddedPass = sprintf "%-$CharFormat"."s", $Password;
+ 	$Verbose and do
+ 	{
+ 		$PassLabel="Password=";
+@@ -616,6 +759,12 @@
+ 			print "$PassLabel"."$PaddedPass"."$CryptLabel"."$CryptedPass\n";
+ 			$Verbose and $PaddedPass = $EmptyPassword;
+ 		}
++		elsif ($CryptMd5) 
++		{
++			$CryptedPass = CryptMd5Password($Password);
++			print "$PassLabel"."$PaddedPass"."$CryptLabel"."$CryptedPass\n";
++			$Verbose and $PaddedPass = $EmptyPassword;
++		}
+ 		else
+ 		{
+ 			print "$PassLabel"."$Password\n";
+--- makepasswd-1.10.orig/makepasswd.1
++++ makepasswd-1.10/makepasswd.1
+@@ -1,4 +1,4 @@
+-.\" Copyright (C) 1997 Johnie Ingram (johnie@debian.org).
++.\" Copyright (C) 1997-1998 Johnie Ingram (johnie@debian.org).
+ .\"
+ .\" This is free documentation; you can redistribute it and/or
+ .\" modify it under the terms of the GNU General Public License as
+@@ -33,7 +33,7 @@
+ .I N
+ ]
+ [
+-.B \--crypt | --nocrypt
++.B \--crypt | --nocrypt | --crypt-md5
+ ]
+ [
+ .B \--cryptsalt
+@@ -72,9 +72,9 @@
+ .SH DESCRIPTION
+ .LP
+ .B makepasswd
+-generates true random passwords by using the /dev/random feature of
+-Linux, with the emphasis on security over pronounceability.  It can
+-also encrypt plaintext passwords given on the command line.
++generates true random passwords using /dev/urandom, with the emphasis on
++security over pronounceability.
++It can also encrypt plaintext passwords given on the command line.
+ .SH OPTIONS
+ .TP
+ .B --chars N
+@@ -83,8 +83,8 @@
+ .TP
+ .B --clearfrom FILE
+ Use password from FILE instead of generating passwords.  Requires
+-the --crypt
+-option; may not be used with these options: --chars, --maxchars, --minchars,
++the --crypt or the --crypt-md5
++options; may not be used with these options: --chars, --maxchars, --minchars,
+ --count, --string, --nocrypt.  Trailing newlines are removed but other white
+ space is not.
+ .TP
+@@ -94,6 +94,9 @@
+ .B --crypt
+ Produce encrypted passwords.
+ .TP
++.B --crypt-md5
++Produce encrypted passwords using the MD5 digest (hash) algorithm.
++.TP
+ .B --cryptsalt N
+ Use crypt() salt N, a positive number <= 4096.  If random seeds are
+ desired, specify a zero value (the default).
+@@ -102,10 +105,10 @@
+ Ignore other operands and produce only a help display.
+ .TP
+ .B --maxchars N
+-Generate passwords with at most N characters (default = 8).
++Generate passwords with at most N characters (default = 10).
+ .TP
+ .B --minchars N
+-Generate passwords with at least N characters (default = 6).
++Generate passwords with at least N characters (default = 8).
+ .TP
+ .B --nocrypt
+ Do not encrypt the generated password(s) (the default).
+@@ -116,13 +119,17 @@
+ .B --randomseed N
+ Use random number seed N, between 0 and 2^32 inclusive.  A zero value
+ results in a real-random seed.
++This generates much less secure passwords than the default; not only does it
++generate predictable passwords due to the fixed seed, but the range of
++available seeds is 32 bits rather than the default of 256 bits, and cannot
++be changed without breaking expectations of previous users of this option.
++If possible, do not use this option.
+ .TP
+ .B --rerandom N
+ Set the random seed value every N values used.  Specify zero to use a
+ single seed value (the default). Specify one to get true-random
+-passwords, but plan on hitting the CONTROL key a lot while it's
+-running.  The Linux entropy device is quickly depleted and keystroke
+-intervals are one source of new randomness.
++passwords, though note that doing this too frequently will deplete the
++supply of entropy available in the kernel's entropy pool.
+ .TP
+ .B --repeatpass N
+ Use each password N times (4096 maximum, --crypt must be set and
+@@ -142,9 +149,11 @@
+ Cooperative IRC network.  It may potentially be of use in any
+ situation where passwords must be secure and need not be memorized by
+ humans.
++.LP
++Colin Watson modified it to use OpenSSL's pseudo-random number generator.
+ .SH COPYRIGHT
+ .LP
+-Copyright (c) 1997 by lilo <lilo@linpeople.org>.  All rights are
++Copyright (c) 1997-1998 by lilo <lilo@linpeople.org>.  All rights are
+ reserved by the author.  This program may be used under the terms of
+ version 2 of the GNU Public License.
+ .SH "SEE ALSO"

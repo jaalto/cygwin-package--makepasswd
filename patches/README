@@ -1,0 +1,7 @@
+The Debian patch would:
+
+- Add dependency to Crypt::OpenSSL::Random
+- Add option --crypt-md5
+
+However, Cygwin does not have that Perl module packaged, so the patch
+is not applied.

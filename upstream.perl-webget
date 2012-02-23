@@ -1,0 +1,2 @@
+tag1: makepasswd
+  http://packages.debian.org/unstable/makepasswd pregexp:orig.tar.gz file:makepasswd_1.10.orig.tar.gz new: x:
