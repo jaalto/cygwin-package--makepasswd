@@ -1,24 +1,26 @@
 To: cygwin-announce@cygwin.com
-Subject: Updated: makepasswd 1.10-1 -- decription
+Subject: Updated: makepasswd 1.10-2 -- Generate and encrypt passwords
 --text follows this line--
 
 PACKAGE DESCRIPTION
 ===================
 
-Homepage:
+Homepage: http://packages.debian.org/makepasswd
 License : GPL
 
-<write description here>
+Generate true random passwords using /dev/urandom, with the emphasis
+on security over pronounceability. It can also encrypt plaintext
+passwords given in a temporary file.
 
 CHANGES SINCE LAST RELEASE
 ==========================
 
-<Add this section if this is update>
+No user visible chnages (Cygwin packaging).
 
 INSTALL OR UPGRADE NOTES
 ========================
 
-<if anything to watch out>
+Standard install.
 
 CYGWIN INSTALLATION INFORMATION
 ===============================
