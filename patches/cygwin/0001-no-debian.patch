@@ -1,0 +1,29 @@
+From 88cfd5c5eb49ae28e6d08ba18fb643885c176494 Mon Sep 17 00:00:00 2001
+From: Jari Aalto <jari.aalto@cante.net>
+Date: Sun, 15 Sep 2013 21:58:10 +0300
+Subject: [PATCH] no debian
+Organization: Private
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Jari Aalto <jari.aalto@cante.net>
+---
+ makepasswd.1 |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/makepasswd.1 b/makepasswd.1
+index c56ed6a..aa6890c 100755
+--- a/makepasswd.1
++++ b/makepasswd.1
+@@ -15,7 +15,7 @@
+ .\" Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139,
+ .\" USA.
+ .\"
+-.TH makepasswd 1 "1998 February 9" "Debian Distribution" "UNIX Reference Manual"
++.TH makepasswd 1 "1998 February 9" "Manual" "UNIX Reference Manual"
+ .SH NAME
+ makepasswd \- generate and/or encrypt passwords
+ .SH SYNOPSIS
+-- 
+1.7.9
+
