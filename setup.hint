@@ -1,3 +1,4 @@
+# ARCH=noarch
 sdesc: "Generate and encrypt passwords"
 ldesc: "Generate true random passwords using /dev/urandom, with the emphasis
 on security over pronounceability. It can also encrypt plaintext
